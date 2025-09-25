@@ -9,5 +9,8 @@
         public IEnumerable<string> Tags { get; set; }
         public string Notes { get; set; }
         public DateTime CreatedAt { get; set; }
+
+
+        public string? ETag { get; init; }
     }
 }

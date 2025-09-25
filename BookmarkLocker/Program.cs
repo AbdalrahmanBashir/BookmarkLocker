@@ -1,21 +1,44 @@
 using BookmarkLocker.Config;
+using BookmarkLocker.Services;
+using Microsoft.Azure.Cosmos;
+using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 
+builder.Services.Configure<CosmosOptions>(builder.Configuration.GetSection("Cosmos"));
+builder.Services.AddSingleton(sp =>
+{
+    var options = sp.GetRequiredService<IOptions<CosmosOptions>>().Value;
+    var clientOptions = new CosmosClientOptions
+    {
+        ApplicationName = "BookmarkLocker",
+        AllowBulkExecution = true,
+
+        SerializerOptions = new CosmosSerializationOptions
+        {
+            PropertyNamingPolicy = CosmosPropertyNamingPolicy.CamelCase
+        }
+    };
+
+    var client = new CosmosClient(options.AccountEndpoint, options.AccountKey, clientOptions);
+
+    var db = client.CreateDatabaseIfNotExistsAsync(options.DatabaseName).GetAwaiter().GetResult();
+
+    db.Database.CreateContainerIfNotExistsAsync(new ContainerProperties{
+        Id = options.ContainerName,
+        PartitionKeyPath = options.PartitionKeyPath}, throughput: 400).GetAwaiter().GetResult();
+    return client;
+});
+
+builder.Services.AddSingleton<IBookmarkService, BookmarkService>();
+
 builder.Services.AddControllers();
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
+
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-builder.Services.Configure<CosmosOptions>(options =>
-{
-    options.AccountEndpoint = builder.Configuration["Cosmos:AccountEndpoint"] ?? string.Empty;
-    options.DatabaseName = builder.Configuration["Cosmos:DatabaseName"] ?? string.Empty;
-    options.ContainerName = builder.Configuration["Cosmos:ContainerName"] ?? string.Empty;
-    options.PartitionKeyPath = builder.Configuration["Cosmos:PartitionKeyPath"] ?? "/userId";
-});
 
 var app = builder.Build();
 
